@@ -37,12 +37,15 @@ class DataLoader:
             print('[ERROR] These image indexes do not exist:', candidate_indexes)
             return
 
-    def transform(self, target_height = 224, target_width = 224, grayscale = True):
+    def transform(self, target_height = 224, target_width = 224, rgb = True):
         # resize image to target size (not crop or padding)
         for index in sorted(self.raw_data.keys()):
             img = self.raw_data[index]['data']
             resized = img.resize((target_height, target_width))
-            if grayscale:
+            if rgb:
+                # 4th channel of .tiff is alpha channel?
+                resized = resized.convert('RGB')
+            else:
                 resized = resized.convert('L')
             self.transformed_data.append(np.array(resized))
         self.transformed_data = np.asarray(self.transformed_data)
@@ -94,3 +97,6 @@ if __name__ == '__main__':
     print(data['test_data'].shape)
     print(data['train_labels'].shape)
     print(data['validation_labels'].shape)
+    # save some sample images
+    im = Image.fromarray(data['train_data'][9])
+    im.save("test.png")
