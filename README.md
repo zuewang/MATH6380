@@ -3,7 +3,7 @@
 ### preprocess
 * usage example
 ```
-dataloader = DataLoader('/path/to/directory/of/images')
+dataloader = DataLoader('/path/to/directory/of/semi-conductor-image-classification-first')
 train_ratio = 0.7
 data = dataloader.get_data(train_ratio)
 print(data['train_data'].shape)

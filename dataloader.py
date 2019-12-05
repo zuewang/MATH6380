@@ -80,7 +80,14 @@ class DataLoader:
 
         return data
         
-
+def is_grey_scale(img):
+    # the images are grayscale
+    w,h = img.size
+    for i in range(w):
+        for j in range(h):
+            r,g,b = img.getpixel((i,j))
+            if r != g != b: return False
+    return True
 
 
 if __name__ == '__main__':
@@ -100,5 +107,6 @@ if __name__ == '__main__':
     # for i, index in enumerate( np.random.randint(len(data['train_data']), size = 10) ):
     #     # save some sample images
     #     im = Image.fromarray(data['train_data'][index])
+    #     print('is grayscale:', is_grey_scale(im))
     #     im.save('test' + str(i) + '.png')
     #     print('test image', i, index, 'label:', data['train_labels'][index])
