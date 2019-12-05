@@ -3,53 +3,41 @@ import os
 from PIL import Image
 
 class DataLoader:
-    def __init__(self, image_dir):
-        '''
-        The labels provided is .docx which cannot be read by python directly
-        so just set a label vector here
-        0: Not Raphael
-        1: Raphael
-        2: Disputed
-        '''
-        self.labels = np.array([2, 1, 1, 1, 1, 1, 2, 1, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 1, 2, 2, 1, 1])
-        self.size = self.labels.shape[0]
-        self.root_dir = image_dir
+    def __init__(self, image_dir, target_height = 224, target_width = 224, rgb = True):
+        self.data = {}
+        # labels
+        self.lgood = 0
+        self.lbad = 1
+        self.ltest = -1
 
-        self.raw_data = {}
-        self.transformed_data = []
+        image_extension = '.jpg'
 
-        image_extensions = ['jpg', 'TIF', 'tif', 'jpeg', 'tiff', 'jpg']
+        # load training data
+        dir2label = {'train/good_0': self.lgood, 'train/bad_1': self.lbad, 'test/all_tests': self.ltest}
+        for subdir in dir2label:
+            folder = os.path.join(image_dir, subdir)
+            label = dir2label[subdir]
+            images_this_label = []
+            for filename in os.listdir(folder):
+                filepath = os.path.join(folder, filename)
+                if filename.endswith(image_extension):
+                    img = Image.open(filepath)
+                    width, height = img.size
+                    if width != target_width or height != target_height:
+                        print(filepath, '(width, height) resize:(', width, height, ') -> (', target_width, target_height, ')')
+                        img = img.resize((target_height, target_width))
+                    
+                    if rgb:
+                        img = img.convert('RGB')
+                    else:
+                        img = img.convert('L')
+
+                    images_this_label.append(np.array(img))
+                else:
+                    print(filepath, 'is not a jpg file!')
+            self.data[label] = np.asarray(images_this_label)
         
-        candidate_indexes = list(range(0, self.size))
-
-        for name in os.listdir(image_dir):
-            ext = name.split('.')[-1]
-            if ext in image_extensions:
-                try:
-                    image_index = int(name.split('.')[0]) - 1
-                    candidate_indexes.remove(image_index)
-                    img = Image.open(os.path.join(image_dir, name))
-                    self.raw_data[image_index] = {'filename': name, 'data': img, 'label': self.labels[image_index]}
-                except:
-                    print('not related to this project:', name)
-        
-        if len(candidate_indexes) > 0:
-            print('[ERROR] These image indexes do not exist:', candidate_indexes)
-            return
-
-    def transform(self, target_height = 224, target_width = 224, rgb = True):
-        # resize image to target size (not crop or padding)
-        for index in sorted(self.raw_data.keys()):
-            img = self.raw_data[index]['data']
-            resized = img.resize((target_height, target_width))
-            if rgb:
-                # 4th channel of .tiff is alpha channel?
-                resized = resized.convert('RGB')
-            else:
-                resized = resized.convert('L')
-            self.transformed_data.append(np.array(resized))
-        self.transformed_data = np.asarray(self.transformed_data)
-        # TODO: rotate height, width, dimension? tiff has 4 dimensions, will cause error here
+        print('number of good images:', len(self.data[self.lgood]), ' number of bad images:', len(self.data[self.lbad]), ' number of test images:', len(self.data[self.ltest]))
 
     def get_data(self, train_ratio = 1, shuffle = True):
         if train_ratio > 1 or train_ratio <= 0:
@@ -57,31 +45,38 @@ class DataLoader:
             return
 
         data = {}
-        indexes0 = np.where(self.labels == 0)[0] # np.where return a tuple containing the array
-        indexes1 = np.where(self.labels == 1)[0]
-        test_indexes = np.where(self.labels == 2)[0]
-        num_train0 = int(len(indexes0) * train_ratio)
-        num_train1 = int(len(indexes1) * train_ratio)
-        if shuffle:
-            np.random.shuffle(indexes0)
-            np.random.shuffle(indexes1)
-            np.random.shuffle(test_indexes)
+        num_good = len(self.data[self.lgood])
+        num_bad = len(self.data[self.lbad])
+        num_test = len(self.data[self.ltest])
 
-        train_indexes = np.concatenate((indexes0[:num_train0], indexes1[:num_train1]))
-        validation_indexes = np.concatenate((indexes0[num_train0:], indexes1[num_train1:]))
-        if shuffle:
-            np.random.shuffle(train_indexes)
-            np.random.shuffle(validation_indexes)
-        else:
-            train_indexes = np.sort(train_indexes)
-            validation_indexes = np.sort(validation_indexes)
-        # np.dtype?
+        data_test = self.data[self.ltest]
+        data_labeled = np.concatenate((self.data[self.lgood], self.data[self.lbad]))
+        labels = np.asarray([self.lgood] * num_good + [self.lbad] * num_bad)
+        indexes_good = np.arange(0, num_good)
+        indexes_bad = np.arange(num_good, len(labels))
+        indexes_test = np.arange(num_test)
         
-        data['train_labels'] = self.labels[train_indexes]
-        data['train_data'] = self.transformed_data[train_indexes]
-        data['validation_labels'] = self.labels[validation_indexes]
-        data['validation_data'] = self.transformed_data[validation_indexes]
-        data['test_data'] = self.transformed_data[test_indexes]
+        if shuffle:
+            np.random.shuffle(indexes_good)
+            np.random.shuffle(indexes_bad)
+            np.random.shuffle(indexes_test)
+        
+        num_train_good = int(num_good * train_ratio)
+        num_train_bad = int(num_bad * train_ratio)
+        indexes_train = np.concatenate((indexes_good[:num_train_good], indexes_bad[:num_train_bad]))
+        indexes_validation = np.concatenate((indexes_good[num_train_good:], indexes_bad[num_train_bad:]))
+        if shuffle:
+            np.random.shuffle(indexes_train)
+            np.random.shuffle(indexes_validation)
+        else:
+            train_indexes = np.sort(indexes_train)
+            validation_indexes = np.sort(indexes_validation)
+
+        data['train_labels'] = labels[indexes_train]
+        data['train_data'] = data_labeled[indexes_train]
+        data['validation_labels'] = labels[indexes_validation]
+        data['validation_data'] = data_labeled[indexes_validation]
+        data['test_data'] = data_test[indexes_test]
 
         return data
         
@@ -89,14 +84,21 @@ class DataLoader:
 
 
 if __name__ == '__main__':
-    dataloader = DataLoader('/data0/Downloads/Raphael Project final copy')
-    dataloader.transform()
-    data = dataloader.get_data()
-    print(data['train_data'].shape)
-    print(data['validation_data'].shape)
-    print(data['test_data'].shape)
-    print(data['train_labels'].shape)
-    print(data['validation_labels'].shape)
-    # save some sample images
-    im = Image.fromarray(data['train_data'][9])
-    im.save("test.png")
+    dataloader = DataLoader('/data0/semi-conductor-image-classification-first')
+    train_ratio = 0.7
+    data = dataloader.get_data(train_ratio)
+    print('train data:', data['train_data'].shape)
+    print('validation data:', data['validation_data'].shape)
+    print('test data:', data['test_data'].shape)
+    print('train labels:', data['train_labels'].shape)
+    print('validation labels:', data['validation_labels'].shape)
+
+    # import sys
+    # np.set_printoptions(threshold=sys.maxsize)
+    # print(data['train_labels'])
+
+    # for i, index in enumerate( np.random.randint(len(data['train_data']), size = 10) ):
+    #     # save some sample images
+    #     im = Image.fromarray(data['train_data'][index])
+    #     im.save('test' + str(i) + '.png')
+    #     print('test image', i, index, 'label:', data['train_labels'][index])

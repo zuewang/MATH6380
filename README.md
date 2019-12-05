@@ -1,11 +1,11 @@
 # MATH 6380O
 ## Project 1
 ### preprocess
-* usage
+* usage example
 ```
 dataloader = DataLoader('/path/to/directory/of/images')
-dataloader.transform()
-data = dataloader.get_data()
+train_ratio = 0.7
+data = dataloader.get_data(train_ratio)
 print(data['train_data'].shape)
 print(data['validation_data'].shape)
 print(data['test_data'].shape)
