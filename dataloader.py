@@ -1,10 +1,12 @@
 import numpy as np
 import os
 from PIL import Image
+import csv
 
 class DataLoader:
     def __init__(self, image_dir, target_height = 224, target_width = 224, rgb = True):
         self.data = {}
+        self.test_list = list()
         # labels
         self.lgood = 0
         self.lbad = 1
@@ -15,6 +17,7 @@ class DataLoader:
         # load training data
         dir2label = {'train/good_0': self.lgood, 'train/bad_1': self.lbad, 'test/all_tests': self.ltest}
         for subdir in dir2label:
+            test = (subdir == 'test/all_tests')
             folder = os.path.join(image_dir, subdir)
             label = dir2label[subdir]
             images_this_label = []
@@ -24,7 +27,7 @@ class DataLoader:
                     img = Image.open(filepath)
                     width, height = img.size
                     if width != target_width or height != target_height:
-                        print(filepath, '(width, height) resize:(', width, height, ') -> (', target_width, target_height, ')')
+                        # print(filepath, '(width, height) resize:(', width, height, ') -> (', target_width, target_height, ')')
                         img = img.resize((target_height, target_width))
                     
                     if rgb:
@@ -33,6 +36,8 @@ class DataLoader:
                         img = img.convert('L')
 
                     images_this_label.append(np.array(img))
+                    if test:
+                        self.test_list.append(filename.split('.')[0])
                 else:
                     print(filepath, 'is not a jpg file!')
             self.data[label] = np.asarray(images_this_label)
@@ -54,12 +59,12 @@ class DataLoader:
         labels = np.asarray([self.lgood] * num_good + [self.lbad] * num_bad)
         indexes_good = np.arange(0, num_good)
         indexes_bad = np.arange(num_good, len(labels))
-        indexes_test = np.arange(num_test)
+        # indexes_test = np.arange(num_test)
         
         if shuffle:
             np.random.shuffle(indexes_good)
             np.random.shuffle(indexes_bad)
-            np.random.shuffle(indexes_test)
+            # np.random.shuffle(indexes_test)
         
         num_train_good = int(num_good * train_ratio)
         num_train_bad = int(num_bad * train_ratio)
@@ -76,7 +81,9 @@ class DataLoader:
         data['train_data'] = data_labeled[indexes_train]
         data['validation_labels'] = labels[indexes_validation]
         data['validation_data'] = data_labeled[indexes_validation]
-        data['test_data'] = data_test[indexes_test]
+        # data['test_data'] = data_test[indexes_test]
+        data['test_data'] = data_test
+        data['test_list'] = self.test_list
 
         return data
         
@@ -89,6 +96,32 @@ def is_grey_scale(img):
             if r != g != b: return False
     return True
 
+def save_csv(input_file, output_file, test_list, test_labels):
+    if len(test_list) != len(test_labels):
+        print('Error: test list length', len(test_list), 'is not equal to test labels number', len(test_labels))
+        return
+
+    with open(input_file) as csv_file:
+        with open(output_file, mode='w') as out_csv:
+            csv_reader = csv.reader(csv_file, delimiter=',')
+            csv_writer = csv.writer(out_csv)
+            line_count = 0
+            for row in csv_reader:
+                if line_count == 0:
+                    # print(f'Column names are {", ".join(row)}')
+                    csv_writer.writerow(row)
+                    line_count += 1
+                else:
+                    # print(f'\t{row[0]} works in the {row[1]} department, and was born in {row[2]}.')
+                    image_name = row[0]
+                    if not image_name in test_list:
+                        print('cannot find', image_name, 'in the test list, skip')
+                        continue
+                    index = test_list.index(image_name)
+                    label = test_labels[index]
+                    csv_writer.writerow([image_name, str(label)])
+                    line_count += 1
+            print(f'Processed {line_count} lines.')
 
 if __name__ == '__main__':
     dataloader = DataLoader('/data0/semi-conductor-image-classification-first')
